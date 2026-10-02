@@ -30,8 +30,8 @@ app.use(express.json());
 // Transporter configuration using Google SMTP
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT, 10) || 465,
-  secure: process.env.SMTP_SECURE !== 'false', // true for 465, false for 587
+  port: parseInt(process.env.SMTP_PORT, 10) || 587,
+  secure: false, // false for port 587, true for port 465
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS
@@ -178,11 +178,16 @@ app.post('/api/send-order-email', async (req, res) => {
       html: generateOrderHtml(req.body, true)
     };
 
-    // Execute email sends concurrently
-    await Promise.all([
+    // Execute email sends concurrently and report individual failures
+    const results = await Promise.allSettled([
       transporter.sendMail(customerMailOptions),
       transporter.sendMail(adminMailOptions)
     ]);
+
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length > 0) {
+      console.error('⚠️ Partial or full email failure:', failures);
+    }
 
     return res.status(200).json({
       success: true,
